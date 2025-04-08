@@ -2,6 +2,7 @@ import pygame as p
 import ChessEngine, ChessAI
 import sys
 from multiprocessing import Process, Queue
+import time  # Import time to measure move duration
 
 BOARD_WIDTH = BOARD_HEIGHT = 512
 MOVE_LOG_PANEL_WIDTH = 250
@@ -15,6 +16,36 @@ def loadImages():
     pieces = ['wp', 'wR', 'wN', 'wB', 'wK', 'wQ', 'bp', 'bR', 'bN', 'bB', 'bK', 'bQ']
     for piece in pieces:
        IMAGES[piece] = p.transform.scale(p.image.load("images/" + piece + ".png"), (SQUARE_SIZE, SQUARE_SIZE))
+
+# Add this function to draw the meter
+def drawMeter(screen, accuracy, time_taken):
+    """
+    Draws a meter on the right-bottom side of the screen to display accuracy and time taken per move.
+    :param screen: The pygame screen object.
+    :param accuracy: The accuracy of the AI (as a percentage).
+    :param time_taken: The time taken for the last move (in seconds).
+    """
+    meter_rect = p.Rect(BOARD_WIDTH, BOARD_HEIGHT - 50, MOVE_LOG_PANEL_WIDTH, 50)
+    p.draw.rect(screen, p.Color('black'), meter_rect)
+    font = p.font.SysFont("Arial", 16, True, False)  # Bold font
+
+    # Determine accuracy color (green for high accuracy, red for low accuracy)
+    if accuracy >= 75:
+        accuracy_color = p.Color('green')
+    elif accuracy >= 50:
+        accuracy_color = p.Color('yellow')
+    else:
+        accuracy_color = p.Color('red')
+
+    # Display Accuracy
+    accuracy_text = f"Accuracy: {accuracy:.2f}%"
+    accuracy_surface = font.render(accuracy_text, True, accuracy_color)
+    screen.blit(accuracy_surface, meter_rect.move(10, 5))
+
+    # Display Time Taken (always in white)
+    time_text = f"Time: {time_taken:.2f}s"
+    time_surface = font.render(time_text, True, p.Color('white'))
+    screen.blit(time_surface, meter_rect.move(10, 25))
 
 def main():
     p.init()
@@ -36,6 +67,10 @@ def main():
     move_log_font = p.font.SysFont("Arial", 14, False, False)
     player_one = True  # if a human is playing white, then this will be True, else False
     player_two = False  # if a hyman is playing white, then this will be True, else False
+
+    # Variables to track accuracy and time
+    accuracy = 0.0
+    time_taken = 0.0
 
     while running:
         human_turn = (game_state.white_to_move and player_one) or (not game_state.white_to_move and player_two)
@@ -94,6 +129,7 @@ def main():
                 ai_thinking = True
                 return_queue = Queue()  # used to pass data between threads
                 move_finder_process = Process(target=ChessAI.findBestMove, args=(game_state, valid_moves, return_queue))
+                start_time = time.time()  # Start timing the AI move
                 move_finder_process.start()
 
             if not move_finder_process.is_alive():
@@ -104,6 +140,8 @@ def main():
                 move_made = True
                 animate = True
                 ai_thinking = False
+                time_taken = time.time() - start_time  # Calculate time taken for the move
+                accuracy = calculateAccuracy(time_taken)  # Update accuracy
 
         if move_made:
             if animate:
@@ -117,6 +155,7 @@ def main():
 
         if not game_over:
             drawMoveLog(screen, game_state, move_log_font)
+            drawMeter(screen, accuracy, time_taken)  # Draw the meter
 
         if game_state.checkmate:
             game_over = True
@@ -233,6 +272,22 @@ def animateMove(move, screen, board, clock):
         screen.blit(IMAGES[move.piece_moved], p.Rect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
         p.display.flip()
         clock.tick(60)
+
+def calculateAccuracy(time_taken, max_time=5):
+    """
+    Calculates accuracy based on the time taken for the AI to find a move.
+    :param time_taken: Time taken by the AI to find the move (in seconds).
+    :param max_time: Maximum time threshold for accuracy (default is 5 seconds).
+    :return: Accuracy as a percentage.
+    """
+    if time_taken <= 1:
+        return 100.0  # 100% accuracy if time taken is <= 1 second
+    elif time_taken >= max_time:
+        return 0.0  # 0% accuracy if time taken exceeds max_time
+
+    # Linearly decrease accuracy between 1 second and max_time
+    accuracy = 100 - ((time_taken - 1) / (max_time - 1)) * 100
+    return max(0, min(100, accuracy))  # Clamp accuracy between 0 and 100
 
 if __name__ == "__main__":
     main()

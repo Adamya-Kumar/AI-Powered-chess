@@ -2,6 +2,7 @@
 Handling the AI moves.
 """
 import random
+import time
 
 piece_score = {"K": 0, "Q": 9, "R": 5, "B": 3, "N": 3, "p": 1}
 
@@ -64,7 +65,82 @@ piece_position_scores = {"wN": knight_scores,
 CHECKMATE = 1000
 STALEMATE = 0
 DEPTH = 3
+# 
 
+class Node:
+    def __init__(self, game_state, parent=None):
+        self.game_state = game_state
+        self.parent = parent
+        self.children = []
+        self.visits = 0
+        self.value = 0
+
+    def is_fully_expanded(self):
+        return len(self.children) == len(self.game_state.getValidMoves())
+
+    def best_child(self, exploration_weight=1.4):
+        """
+        Select the best child node using the UCT formula.
+        """
+        return max(self.children, key=lambda child: child.value / (child.visits + 1) +
+                   exploration_weight * (2 * (self.visits + 1)) ** 0.5)
+
+
+def findBestMoveMCTS(game_state, valid_moves, simulations=1000):
+    """
+    Finds the best move using Monte Carlo Tree Search (MCTS).
+    """
+    root = Node(game_state)
+
+    for _ in range(simulations):
+        node = root
+        # Selection
+        while node.is_fully_expanded() and node.children:
+            node = node.best_child()
+
+        # Expansion
+        if not node.is_fully_expanded():
+            move = random.choice([m for m in game_state.getValidMoves() if m not in [child.game_state.move_log[-1] for child in node.children]])
+            game_state.makeMove(move)
+            child_node = Node(game_state, parent=node)
+            node.children.append(child_node)
+            game_state.undoMove()
+            node = child_node
+
+        # Simulation
+        value = simulate_random_game(node.game_state)
+
+        # Backpropagation
+        backpropagate(node, value)
+
+    # Return the best move from the root node
+    return root.best_child(exploration_weight=0).game_state.move_log[-1]
+
+
+def simulate_random_game(game_state):
+    """
+    Simulates a random game from the given game state and returns the result.
+    """
+    while not game_state.checkmate and not game_state.stalemate:
+        moves = game_state.getValidMoves()
+        if not moves:
+            break
+        move = random.choice(moves)
+        game_state.makeMove(move)
+    if game_state.checkmate:
+        return -1 if game_state.white_to_move else 1
+    return 0
+
+
+def backpropagate(node, value):
+    """
+    Backpropagates the simulation result up the tree.
+    """
+    while node:
+        node.visits += 1
+        node.value += value
+        node = node.parent
+# 
 
 def findBestMove(game_state, valid_moves, return_queue):
     global next_move
@@ -79,7 +155,10 @@ def findMoveNegaMaxAlphaBeta(game_state, valid_moves, depth, alpha, beta, turn_m
     global next_move
     if depth == 0:
         return turn_multiplier * scoreBoard(game_state)
-    # move ordering - implement later //TODO
+
+    # Move Ordering: Sort moves based on their heuristic scores
+    valid_moves = orderMoves(game_state, valid_moves)
+
     max_score = -CHECKMATE
     for move in valid_moves:
         game_state.makeMove(move)
@@ -129,3 +208,27 @@ def findRandomMove(valid_moves):
     Picks and returns a random valid move.
     """
     return random.choice(valid_moves)
+
+
+def orderMoves(game_state, valid_moves):
+    """
+    Orders moves based on a heuristic score.
+    Prioritizes captures, checks, and promotions.
+    """
+    def scoreMove(move):
+        # Assign a high score for captures (e.g., capturing a queen is better than a pawn)
+        if move.piece_captured != "--":
+            return piece_score[move.piece_captured[1]] - piece_score[move.piece_moved[1]]
+        # Assign a score for checks
+        game_state.makeMove(move)
+        is_check = game_state.inCheck()
+        game_state.undoMove()
+        if is_check:
+            return 10  # Arbitrary score for checks
+        # Assign a score for promotions
+        if move.is_pawn_promotion:
+            return 8  # Arbitrary score for promotions
+        return 0  # Default score for non-special moves
+
+    # Sort moves by their scores in descending order
+    return sorted(valid_moves, key=scoreMove, reverse=True)

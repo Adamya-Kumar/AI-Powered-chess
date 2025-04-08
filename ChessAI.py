@@ -151,10 +151,18 @@ def findBestMove(game_state, valid_moves, return_queue):
     return_queue.put(next_move)
 
 
-def findMoveNegaMaxAlphaBeta(game_state, valid_moves, depth, alpha, beta, turn_multiplier):
+def findMoveNegaMaxAlphaBeta(game_state, valid_moves, depth, alpha, beta, turn_multiplier, null_move_allowed=True):
     global next_move
     if depth == 0:
         return turn_multiplier * scoreBoard(game_state)
+
+    # Null Move Heuristic
+    if null_move_allowed and depth >= 3 and not game_state.inCheck():
+        game_state.white_to_move = not game_state.white_to_move  # Switch turn to simulate null move
+        null_score = -findMoveNegaMaxAlphaBeta(game_state, game_state.getValidMoves(), depth - 1 - 2, -beta, -beta + 1, -turn_multiplier, False)
+        game_state.white_to_move = not game_state.white_to_move  # Undo null move
+        if null_score >= beta:
+            return beta  # Beta cutoff
 
     # Move Ordering: Sort moves based on their heuristic scores
     valid_moves = orderMoves(game_state, valid_moves)

@@ -1,6 +1,6 @@
 # Chess Game
 
-This project is a simple Chess game developed in Python. The game uses the `pygame` library to handle the graphical interface and game interactions. You can play against another player in a local two-player setup...
+This project is a simple Chess game developed in Python. The game uses the `pygame` library to handle the graphical interface and game interactions. You can play against another player in a local two-player setup.
 
 ## Features
 
